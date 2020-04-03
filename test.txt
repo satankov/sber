@@ -1,0 +1,102 @@
+/* Comments
+1.Рассчитать суммарное время между логами для каждого application_id. То есть нужно взять 
+    минимальную дату и максимальную дату по каждому application_id и рассчитать время.
+
+Допустим, что в столбце status_date данные представлены не в строковом формате, а в формате DATE.
+И допустим, у нас есть библиотека для работы со временем DATETIME (я просто не знаю какая стоит у вас).
+Я буду использовать следующие функции:
+    .INTERVAL(date1, date2, scale) - вычисляет разницу между date1 и date2 в единицах scale (year, week, day, s, ms, ns ...)
+    .TO_START_OF_WEEK(date) - возвращает дату начала недели для date
+*/
+
+
+SELECT
+    application_id, 
+    DATETIME.INTERVAL(MAX(status_date), MIN(status_date), ms) as delta -- ms - миллисекунды
+FROM 
+    table
+GROUP BY 
+    application_id
+
+
+/* Comments
+2. Вывести динамику по неделям среднего срока по максимальной дате статуса(из первой задачи)
+
+Уточнение:
+    Я так понимаю, что начало отсчета срока для application_id начинается в MIN(status_date).
+    И что конец срока это MAX(status_date), а не окончание недели, в которую начался отсчет текущего срока.
+*/
+
+SELECT
+    week,
+    AVG(delta)
+FROM (
+    SELECT
+        DATETIME.INTERVAL(MAX(status_date), MIN(status_date), ms) as delta,
+        DATETIME.TO_START_OF_WEEK(MIN(status_date)) as week
+    FROM 
+        table
+    GROUP BY 
+        application_id
+)
+GROUP BY
+    week
+ORDER BY
+    week ASC
+
+
+/* Comments
+3.Рассчитать суммарное  время отрезков между статусами (1 и 3); (35 и 44,45). При этом, если в 
+    одном application_id есть несколько связок данных статусов в итоговом результате должна быть сумма всех отрезков.
+
+Уточнение:
+    может ли одному status в рамках одного application_id соответствовать несколько status_date?
+*/
+
+
+SELECT
+    application_id,
+    SUM(delta) as TOTAL
+FROM (
+    SELECT 
+        a.application_id as application_id,
+        DATETIME.INTERVAL(b.status_date, a.status_date, ms) as delta
+    FROM (
+        SELECT
+            application_id,
+            status_date,
+            CASE
+                WHEN
+                    status == 1
+                THEN
+                    'int_1'
+                ELSE
+                    'int_2'
+            END AS interval
+        FROM 
+            table
+        WHERE
+            status in (1,35)
+    ) as a
+    INNER JOIN (
+        SELECT
+            application_id,
+            status_date,
+            CASE
+                WHEN
+                    status == 3
+                THEN
+                    'int_1'
+                ELSE
+                    'int_2'
+            END AS interval
+    FROM 
+        table
+    WHERE
+        status in (3,44,45)
+    ) as b
+    ON (a.application_id = b.application_id)
+        AND (a.interval = b.interval);
+)
+GROUP BY
+    application_id
